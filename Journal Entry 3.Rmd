@@ -1,0 +1,79 @@
+---
+title: "Journal Entry 3"
+author: "Alex Neuman"
+date: "January 29, 2018"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Methodology 
+A wise man once told me that, when learning a new programming language, the first goal should be to get something, anything to run. In keeping with that advice the main objective of this exercise was to get a model to run without issue and then to test the validity of said model. In order to achieve this end, the iconic "Titanic" dataset was selected. The reason for this set is threefold: 
+#1. The resources available for this dataset are numerous ensuring a lifeline in the likely event of getting stuck. 
+#2. The variables themselves aren't very technical in nature which allows for an easier analysis of outputs.
+#3. The dataset itself is relatively small allowing it to be readily examined in Excel. 
+With the goal in mind, a logistical regression model seemed to be the most obvious as the binary "survival" varible contained with the dataframe was already encoded with "0" and "1" to indicate whether a passanger survived the voyage. However, seeing as there are already a plethera of submissions attempting to predict passenger survival rates on Kaggle, I decided to differentiate myself by attempting to predict whether a passenger was considered wealthy or not. This allowed for some creativity in the data wrangling process and provided an output that hopefully is unique enough to stimulate further interest.
+  
+## Data Wrangling 
+The data wrangling process is often the most cumbersome and time consuming part of any data analysis project and that proved no different here. The dataset is available already split into a test and training set however, the data itself proved unusable in its original state and thus the two sets had to be merged back together. NA and NULL values were handled rather inelegantly by simply setting them to their respective variable's median value. In the future I would like to look at possibly building a predictive model for these instances that would be a more refined solution to this problem. Two new variables were created and added to the dataset; "Familysize", which took the number of siblings and the number of parents on board for each passenger and merged them together and, "Wealthy", which is a binary classifier based on whether a passenger was in 1st class or not. Familysize was used as I believed that total family size would be a better predictor for passenger wealth than either number of parents/siblings would be alone and the wealthy variable is what will be used as the dependant classifier.
+```{r}
+library(ROCR)
+Titanic.train = read.csv(file="train.csv", stringsAsFactors = FALSE, header = TRUE)
+Titanic.test = read.csv(file="test.csv", stringsAsFactors = FALSE, header = TRUE)
+str(Titanic.train)
+Titanic.train$InTrainSet = TRUE
+Titanic.test$InTrainSet = FALSE
+Titanic.test$Survived = NA
+names(Titanic.train)
+names(Titanic.test)
+Titanic.complete = rbind(Titanic.train, Titanic.test)
+Titanic.complete[Titanic.complete$Embarked == '', "Embarked"] = "S"
+median.age = median(Titanic.complete$Age, na.rm = TRUE)
+Titanic.complete[is.na(Titanic.complete["Age"]), "Age"] = median.age
+table(is.na(Titanic.complete$Age))
+median.fare = median(Titanic.complete$Fare, na.rm = TRUE)
+Titanic.complete[is.na(Titanic.complete["Fare"]), "Fare"] = median.fare
+Titanic.complete$Wealthy[Titanic.complete$Pclass > 2] = 1
+Titanic.complete$Wealthy[Titanic.complete$Pclass < 3] = 0
+as.numeric(Titanic.complete$Wealthy)
+Titanic.complete$Sex = as.factor(Titanic.complete$Sex)
+Titanic.complete$Embarked = as.factor(Titanic.complete$Embarked)
+Titanic.complete$Familysize = Titanic.complete$SibSp + Titanic.complete$Parch
+Titanic.complete$Survived = as.factor(Titanic.complete$Survived)
+str(Titanic.complete)
+Titanic.train.build = Titanic.complete[Titanic.complete$InTrainSet==TRUE,]
+Titanic.test.build = Titanic.complete[Titanic.complete$InTrainSet==FALSE,]
+      
+```
+
+## Logistic Regression Model 
+
+The first logistic regression model built included the "Survived", "Familysize", "Sex", "Age", and "Embarked" variables with Survival, Age, and Embarked=Q (meaning the passenger departed from the "Q" port) all being significant at the 99% confidence level. However the model's AIC value was an unfortunate 971 so a revised model was built that removed the insignificant variables. The revised model did not significantly improve the AIC value however. Nonetheless, the model ran which was the ultimate goal of this analysis. 
+
+```{r}
+model = glm(formula = Wealthy ~ Survived + Familysize + Sex + Age + Embarked, family = "binomial", data = Titanic.train.build)
+summary(model)
+model.revised = glm(formula = Wealthy ~ Survived + Age + Embarked, family = "binomial", data = Titanic.train.build)
+summary(model.revised)
+```
+
+## Model Accuracy 
+In order to evaluate the accuracy of the revised model a confusion matrix and an ROC were both constructed and the test dataset was used for evalution. The regression model was able to predict whether the passenger was wealthy or not with roughly a 70% accuracy. However, the ROC curve doesn't "hug" the upper left corner of the graph meaning the model has a tendency to generate a significant number of false positives. 
+```{r}
+res = predict(model.revised, Titanic.train.build, type = "response")
+table(Truevalue=Titanic.train.build$Wealthy, Predictedvalue=res>0.5)
+Accuracy = (257+388)/(257+388+103+143)
+ROCRPred = prediction(res, Titanic.train.build$Wealthy)
+ROCRPref = performance(ROCRPred, "tpr", "fpr")
+plot(ROCRPref,colorize=TRUE,print.cutoffs.at=seq(0.1,by=0.1))
+```
+
+
+
+## Conclusion
+Considering that this was the first time I built a model in R from scratch, I am pretty pleased with the outcome. Given my newfound comfort with R through both this exercise and the DataCamp tutorials, I'm excited to discover more advanced statistical modeling tools that can be ran on the easily conceptualized Titanic Dataset.
